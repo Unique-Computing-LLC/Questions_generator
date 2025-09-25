@@ -24,10 +24,10 @@ import os
 @exhandler
 def main() -> None:
     RUN_TYPE = get_run_type()
-    load_api_credentials()
     event_name: str = EVENT_NAME_MAP.get(RUN_TYPE, "generate_lesson_content")
     logger.info(f"Starting slide metadata generation for event: {event_name}")
     config: Any = duaa_config.load_config(event_name)
+    load_api_credentials(config)
     logger.debug(f"Loaded config: {config}")
     event: Dict[str, Any] = load_event(event_name, config)
     logger.debug(f"Loaded event: {event}")
@@ -92,6 +92,7 @@ def main() -> None:
             slides_json = generate_lecture_slides_metadata(tg_text, '', config.CLASS, lesson_plan['topic'])
             logger.info("Generated slides metadata.")
             logger.info(f"Saving slides metadata to {slides_json_path}.")
+            print(slides_json)
             with open(slides_json_path, "w", encoding="utf-8") as f:
                 json.dump(slides_json, f, ensure_ascii=False, indent=2)
             logger.debug(f"Uploading slides metadata to S3: {s3_slide_json_filepath}")

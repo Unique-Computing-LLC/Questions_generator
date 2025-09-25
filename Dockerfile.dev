@@ -23,7 +23,7 @@ COPY . .
 # ENV END_USER_PROMPT="Generate new slide narration having exact narration as following: Assalam o Alaikum, How are you students?"
 
 
-ENV PIPELINE_INPUT="{\"CLASS\": \"KG1\", \"LESSON_NUMBER\": 1, \"SUBJECT_NAME\": \"English\", \"LANGUAGE\": \"English\", \"EVENT_NAME\": \"refine_slide_content\", \"TIMESTAMP\": \"2025-08-07-12-06-02\", \"RUN_TYPE\": \"slide_refinement\", \"SLIDE_NO\": 0, \"END_USER_PROMPT\": \"Completely change the slide and make it more modern and I dont like this content completely change it.\"}"
+ENV PIPELINE_INPUT="{\"CLASS\": \"KG1\", \"LESSON_NUMBER\": 1, \"SUBJECT_NAME\": \"English\", \"LANGUAGE\": \"English\", \"EVENT_NAME\": \"refine_slide_content\", \"TIMESTAMP\": \"2025-08-07-12-06-02\", \"RUN_TYPE\": \"initial_run\", \"SLIDE_NO\": 0, \"END_USER_PROMPT\": \"Completely change the slide and make it more modern and I dont like this content completely change it.\"}"
 
 
 CMD ["/bin/bash"]

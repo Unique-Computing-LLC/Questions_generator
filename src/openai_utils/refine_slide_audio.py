@@ -4,15 +4,15 @@ from duaa_edtools.utils.s3 import fetch_file_from_s3, write_file_to_s3, s3_file_
 from openai import OpenAI
 from .audio_refinement_system_prompt import SYSTEM_PROMPT
 from src.openai_utils.prompts import AUDIO_REFINEMENT_PROMPT
+from src.openai_utils.llm import get_json_from_llm
 import json
 
 def refine_slide_audio(
     event, config
 ) -> dict:
     """
-    Sends teacher_guidelines and lesson_content to OpenAI and returns lecture slide content in JSON format.
+    Sends teacher_guidelines and lesson_content to LLM and returns refined slide audio content in JSON format.
     """
-
     s3_slide_metadata_file = config.EVENT_DIR + "/slide_metadata.json"
     slide_metadata_file_path = "/tmp/slide_metadata.json"
     fetch_file_from_s3(s3_slide_metadata_file, slide_metadata_file_path)
@@ -22,39 +22,20 @@ def refine_slide_audio(
 
     slide_metadata = slide_deck_metadata['slides'][int(config.SLIDE_NO)]
     system_prompt = SYSTEM_PROMPT.format(class_name=config.CLASS)
+    user_prompt = AUDIO_REFINEMENT_PROMPT.format(slide_metadata=slide_metadata, audio_refinement_prompt=config.END_USER_PROMPT)
 
-    user_prompt = (
-        f"{AUDIO_REFINEMENT_PROMPT.format(slide_metadata=slide_metadata, audio_refinement_prompt=config.END_USER_PROMPT)}\n\n"
-    )
+    prompts = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
 
-    client = OpenAI()
-
-    response = client.responses.create(
-        model="gpt-4.1",
-        input=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        temperature=0.1,
-    )
-
-    try:
-        slides_json = json.loads(response.output_text)
-    except Exception:
-        # If the model returns markdown or code block, try to extract JSON
-        import re
-        match = re.search(r'```json(.*?)```', response.output_text, re.DOTALL)
-        if match:
-            slides_json = json.loads(match.group(1).strip())
-        else:
-            slides_json = {}
+    slides_json = get_json_from_llm(dict, prompts)
 
     updated_slide_metadata = slide_metadata
     for k in slides_json:
         updated_slide_metadata[k] = slides_json[k]
 
     updated_slide_deck_metadata = slide_deck_metadata
-
     updated_slide_deck_metadata['slides'][int(config.SLIDE_NO)] = updated_slide_metadata
 
     updated_metadata_path = "/tmp/updated_slide_metadata.json"

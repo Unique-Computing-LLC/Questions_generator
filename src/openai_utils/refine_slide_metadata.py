@@ -46,7 +46,6 @@ def refine_slide_metadata(
     with open(updated_metadata_path, "w", encoding="utf-8") as f:
         json.dump(updated_slide_deck_metadata, f, ensure_ascii=False, indent=2)
 
-    print("REFINED SLIDE METADATA:", slides_json.model_dump_json(indent=2))
 
     write_file_to_s3(updated_metadata_path, s3_slide_metadata_file)
     print("file uploaded to S3. at path ", s3_slide_metadata_file)

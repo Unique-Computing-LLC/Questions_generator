@@ -40,7 +40,7 @@ def refine_slide_metadata(
 
     updated_slide_deck_metadata = slide_deck_metadata
 
-    updated_slide_deck_metadata['slides'][int(config.SLIDE_NO)] = slides_json.model_dump()
+    updated_slide_deck_metadata['slides'][int(config.SLIDE_NO)] = slides_json
 
     updated_metadata_path = "/tmp/updated_slide_metadata.json"
     with open(updated_metadata_path, "w", encoding="utf-8") as f:

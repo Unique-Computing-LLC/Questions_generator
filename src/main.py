@@ -45,7 +45,8 @@ def main() -> None:
             "RUN_TYPE": config.RUN_TYPE,
             "RUN_ID": config.RUN_ID,
             "SLIDE_NO": config.SLIDE_NO,
-            "END_USER_PROMPT": config.END_USER_PROMPT
+            "END_USER_PROMPT": config.END_USER_PROMPT,
+            "OPENEDX_USER_ID": config.OPENEDX_USER_ID
         }
     elif event_name == "refine_slide_content":
         logger.info("Refining slide content.")
@@ -64,7 +65,8 @@ def main() -> None:
             "RUN_TYPE": config.RUN_TYPE,
             "SLIDE_NO": config.SLIDE_NO,
             "RUN_ID": config.RUN_ID,
-            "END_USER_PROMPT": config.END_USER_PROMPT   
+            "END_USER_PROMPT": config.END_USER_PROMPT,
+            "OPENEDX_USER_ID": config.OPENEDX_USER_ID
         }
 
     else:

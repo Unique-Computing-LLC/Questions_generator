@@ -2,6 +2,7 @@ from duaa_edtools.utils.s3 import fetch_file_from_s3, write_file_to_s3, s3_file_
 
 
 from openai import OpenAI
+from src.openai_utils.llm_response_models import AudioRefinementResponse
 from .audio_refinement_system_prompt import SYSTEM_PROMPT
 from src.openai_utils.prompts import AUDIO_REFINEMENT_PROMPT
 from src.openai_utils.llm import get_json_from_llm
@@ -29,7 +30,7 @@ def refine_slide_audio(
         {"role": "user", "content": user_prompt},
     ]
 
-    slides_json = get_json_from_llm(dict, prompts)
+    slides_json = get_json_from_llm(AudioRefinementResponse, prompts)
 
     updated_slide_metadata = slide_metadata
     for k in slides_json:

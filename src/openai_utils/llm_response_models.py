@@ -26,3 +26,8 @@ class SlideData(BaseModel):
     class_name: str = Field(..., description="The class this slide belongs to, e.g., 'Kindergarten'.")
     lesson_name: str = Field(..., description="The lesson this slide belongs to, e.g., 'The Importance of Cleanliness'.")
     slides: List[Slide] = Field(..., description="List containing a single slide's metadata in refinement mode.")
+
+
+class AudioRefinementResponse(BaseModel):
+        teacher_narration: str = Field(..., description="Teacher narration explaining the content warmly, encouraging participation, and reinforcing Islamic morals.")
+        post_slide_narration: str = Field(..., description="Brief narration summarizing key points and including Q&A for reinforcement.")

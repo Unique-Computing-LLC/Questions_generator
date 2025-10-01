@@ -13,9 +13,5 @@ SYSTEM_PROMPT = (
     
     "- Include 'teacher_narration' in json output only if teacher narration was generated and only include 'post_slide_narration' if it was generated."
     
-    "\nOutput JSON structure:\n"
-    "    {{\n"
-    '      "teacher_narration": "New teacher narration",\n'
-    '      "post_slide_narration": "New post slide narration."\n'
-    "    }}\n"
+    "Must only output JSON provided in the 'AudioRefinementResponse' model."
 )

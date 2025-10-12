@@ -1,128 +1,126 @@
-from duaa_edtools import config as duaa_config
-from duaa_edtools.event_utils import load_event, save_event
-from duaa_edtools.utils.ex_handler import exhandler
-from duaa_edtools.utils.logger import logger
-from duaa_edtools.utils.s3 import fetch_file_from_s3, write_file_to_s3, s3_file_exists
-from duaa_edtools.utils.aws_secret_manager import get_aws_secrets
-from duaa_edtools.utils import send_task_success
-from duaa_edtools.api import load_api_credentials
+"""
+Open edX Question Generation Pipeline
+Generates questions from PDF content using AWS Bedrock Claude models
+and publishes them to Open edX content libraries.
+"""
 
-from .openai_utils.slide_generator import generate_lecture_slides_metadata
-from .openai_utils.refine_slide_audio import refine_slide_audio
-from .openai_utils.refine_slide_metadata import refine_slide_metadata
-from .utils.system import get_run_type
-from .utils.consts import EVENT_NAME_MAP
-
-from pathlib import Path
-from typing import Any, Dict
-import pandas as pd
-import json
-import logging
 import os
+import logging
+import glob
+from typing import Dict, Any
+
+from .openai_utils.prompts import QUESTION_GENERATION_PROMPT
+from .utils.question_generator import extract_pdf_text, generate_questions_with_bedrock, publish_to_openedx
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
-@exhandler
+def generate_questions_for_openedx(
+    course_content_dir: str = None,
+    library_id: str = None,
+    topic: str = "Course Content",
+    num_questions: int = 10,
+    aws_region: str = 'us-east-1'
+) -> Dict[str, Any]:
+    """
+    Generate questions from  content and publish to Open edX library.
+    
+    Args:
+        course_content_dir: Path to directory containing PDF files
+        library_id: Open edX library ID (e.g., 'lib:myorg:kg1_english_2025')
+        topic: Topic/subject for question generation
+        num_questions: Number of questions to generate
+        aws_region: AWS region for Bedrock
+        
+    Returns:
+        Dict with generation results
+    """
+    logger.info("Starting Open edX question generation workflow...")
+    
+    # Configuration from environment variables
+    course_content_dir = course_content_dir or os.getenv('COURSE_CONTENT_DIR', './Course Content')
+    library_id = library_id or os.getenv('OPENEDX_LIBRARY_ID', 'lib:myorg:kg1_english_2025')
+    api_url = os.getenv('OPENEDX_API_URL', 'http://studio.local.openedx.io:8001')
+    
+    cookies = {
+        'csrftoken': os.getenv('CSRF_TOKEN', ''),
+        'studio_session_id': os.getenv('STUDIO_SESSION_ID', ''),
+        'edx-jwt-cookie-header-payload': os.getenv('JWT_HEADER_PAYLOAD', '')
+    }
+    
+    try:
+        # Extract PDF content
+        logger.info(f"Extracting content from: {course_content_dir}")
+        pdf_files = glob.glob(f"{course_content_dir}/*.pdf")
+        content_text = ""
+        
+        for pdf in pdf_files[:3]:  # Process up to 3 PDF files
+            logger.info(f"Processing: {os.path.basename(pdf)}")
+            content_text += extract_pdf_text(pdf) + "\n\n"
+        
+        if not content_text.strip():
+            logger.warning("No content extracted from PDFs")
+            return {'success': False, 'error': 'No PDF content found'}
+        
+        logger.info(f"Extracted {len(content_text)} characters from {len(pdf_files)} PDF files")
+        
+        # Generate questions using AWS Bedrock
+        logger.info(f"Generating {num_questions} questions using AWS Bedrock...")
+        questions = generate_questions_with_bedrock(
+            content_text, topic, QUESTION_GENERATION_PROMPT, 
+            num_questions=num_questions, aws_region=aws_region
+        )
+        
+        if not questions:
+            logger.warning("No questions generated")
+            return {'success': False, 'error': 'Question generation failed'}
+        
+        logger.info(f"Generated {len(questions)} questions")
+        
+        # Publish to Open edX
+        logger.info(f"Publishing to Open edX library: {library_id}")
+        publish_result = publish_to_openedx(library_id, questions, api_url, cookies)
+        
+        success_count = publish_result['successful']
+        logger.info(f"Successfully published {success_count}/{len(questions)} questions")
+        
+        return {
+            'success': True,
+            'questions_generated': len(questions),
+            'questions_published': success_count,
+            'library_id': library_id,
+            'api_url': api_url
+        }
+        
+    except Exception as e:
+        logger.error(f"Question generation workflow error: {e}")
+        return {'success': False, 'error': str(e)}
+
+
 def main() -> None:
-    RUN_TYPE = get_run_type()
-    event_name: str = EVENT_NAME_MAP.get(RUN_TYPE, "generate_lesson_content")
-    logger.info(f"Starting slide metadata generation for event: {event_name}")
-    config: Any = duaa_config.load_config(event_name)
-    load_api_credentials(config)
-    logger.debug(f"Loaded config: {config}")
-    event: Dict[str, Any] = load_event(event_name, config)
-    logger.debug(f"Loaded event: {event}")
-
-    if event_name == "refine_audio_content":
-        return_event = refine_slide_audio(event, config)
-        event.update(return_event)
-
-        return_dict = {
-            "TIMESTAMP": config.TIMESTAMP,
-            "CLASS": config.CLASS,
-            "LESSON_NUMBER": config.LESSON_NUMBER,
-            "SUBJECT_NAME": config.SUBJECT_NAME,
-            "LANGUAGE": config.LANGUAGE,
-            "RUN_TYPE": config.RUN_TYPE,
-            "RUN_ID": config.RUN_ID,
-            "SLIDE_NO": config.SLIDE_NO,
-            "END_USER_PROMPT": config.END_USER_PROMPT,
-            "OPENEDX_USER_ID": config.OPENEDX_USER_ID,
-            "REVISION_TIMESTAMP": config.REVISION_TIMESTAMP
-        }
-    elif event_name == "refine_slide_content":
-        logger.info("Refining slide content.")
-        # Assuming refine_slide_content is implemented similarly to refine_slide_audio
-        # This function should be defined in the same way as refine_slide_audio
-        return_event = refine_slide_metadata(event, config)
-        
-        event.update(return_event)
-
-        return_dict = {
-            "TIMESTAMP": config.TIMESTAMP,
-            "CLASS": config.CLASS,
-            "LESSON_NUMBER": config.LESSON_NUMBER,
-            "SUBJECT_NAME": config.SUBJECT_NAME,
-            "LANGUAGE": config.LANGUAGE,
-            "RUN_TYPE": config.RUN_TYPE,
-            "SLIDE_NO": config.SLIDE_NO,
-            "RUN_ID": config.RUN_ID,
-            "END_USER_PROMPT": config.END_USER_PROMPT,
-            "OPENEDX_USER_ID": config.OPENEDX_USER_ID,
-            "REVISION_TIMESTAMP": config.REVISION_TIMESTAMP
-        }
-
+    """Main entry point for question generation."""
+    logger.info("Open edX Question Generation Pipeline")
+    logger.info("=" * 50)
+    
+    # Example usage - can be customized based on needs
+    result = generate_questions_for_openedx(
+        course_content_dir=os.getenv('COURSE_CONTENT_DIR', './Course Content'),
+        library_id=os.getenv('OPENEDX_LIBRARY_ID', 'lib:myorg:kg1_english_2025'),
+        topic="KG1 English Course",
+        num_questions=10,
+        aws_region='us-east-1'
+    )
+    
+    if result['success']:
+        logger.info("✅ Question generation completed successfully!")
+        logger.info(f"📊 Generated: {result['questions_generated']} questions")
+        logger.info(f"📤 Published: {result['questions_published']} questions")
+        logger.info(f"📚 Library: {result['library_id']}")
     else:
-        logger.info("Fetching extracted tg file from S3.")
-        extracted_tg_file = fetch_file_from_s3(f"{config.LESSON_DIR}/resources/tg_extracted.md", "/tmp/tg_extracted.md")
-        logger.info("Fetching lesson plan file from S3.")
-        lesson_plan_file = fetch_file_from_s3(f"{config.LESSON_DIR}/lesson_plan.csv", "/tmp/lesson_plan.csv")
-        
-        logger.info("Reading lesson plan CSV.")
-        lesson_plan_df = pd.read_csv(lesson_plan_file)
-        lesson_plan = lesson_plan_df.to_dict(orient="records")[0]
-        logger.debug(f"Lesson plan: {lesson_plan}")
+        logger.error(f"❌ Question generation failed: {result['error']}")
 
-        logger.info("Reading extracted tg file.")
-        tg_text = Path(extracted_tg_file).read_text(encoding="utf-8")
-        logger.info("Generating lecture slides metadata.")
-
-        s3_slide_json_filepath = f"{config.EVENT_DIR}/slide_metadata.json"
-        slides_json_path = "/tmp/slide_metadata.json"
-        event['slides_metadata_file'] = s3_slide_json_filepath
-
-        if 'slides_metadata_file' in event and s3_file_exists(event['slides_metadata_file']):
-            logger.info(f"Slides metadata file already exists on S3: {event['slides_metadata_file']}. Exiting...")
-        else:
-            slides_json = generate_lecture_slides_metadata(tg_text, '', config.CLASS, lesson_plan['topic'])
-            logger.info("Generated slides metadata.")
-            logger.info(f"Saving slides metadata to {slides_json_path}.")
-            print(slides_json)
-            with open(slides_json_path, "w", encoding="utf-8") as f:
-                json.dump(slides_json, f, ensure_ascii=False, indent=2)
-            logger.debug(f"Uploading slides metadata to S3: {s3_slide_json_filepath}")
-            write_file_to_s3(slides_json_path, s3_slide_json_filepath)
-            logger.info(f"Uploaded the slide metadata to S3 at {s3_slide_json_filepath}")
-
-        return_dict = {
-            "TIMESTAMP": config.TIMESTAMP,
-            "CLASS": config.CLASS,
-            "LESSON_NUMBER": config.LESSON_NUMBER,
-            "SUBJECT_NAME": config.SUBJECT_NAME,
-            "LANGUAGE": config.LANGUAGE,
-            "RUN_ID": config.RUN_ID,
-            "RUN_TYPE": config.RUN_TYPE,
-        }
-
-    save_event(config, event)
-    send_task_success(return_dict)
 
 if __name__ == "__main__":
-
-    logger.setLevel(logging.INFO)
-    secrets = get_aws_secrets('duaa-openai-key')
-    print("LOADED OPENAI_API_KEY", secrets.keys())
-
-    for key, value in secrets.items():
-        os.environ[key] = value
-
     main()
